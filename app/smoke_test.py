@@ -1,7 +1,14 @@
 from __future__ import annotations
+
 import logging
-import os
-import openai
+
+from app.llm_service import (
+    LLMConnectionError,
+    LLMProviderError,
+    LLMRateLimitError,
+    LLMService,
+    LLMTimeoutError,
+)
 from app.openai_client import create_openai_client
 
 
@@ -15,43 +22,33 @@ logger = logging.getLogger(__name__)
 
 def main() -> None:
     client = create_openai_client()
-    model = os.getenv("OPENAI_MODEL", "gpt-5.4-mini")
+    service = LLMService(client=client)
 
     try:
-        response = client.responses.create(
-            model=model,
-            instructions=(
-                "You are a concise technical tutor. "
-                "Answer in Persian and do not exceed two sentences."
-            ),
-            input="API چیست و چه کاری انجام می‌دهد؟",
-            max_output_tokens=120,
-        )
+        result = service.generate("API چیست و چه کاری انجام می‌دهد؟")
 
         print("\n--- MODEL OUTPUT ---")
-        print(response.output_text)
+        print(result.text)
 
         print("\n--- METADATA ---")
-        print(f"model: {response.model}")
-        print(f"request_id: {response._request_id}")
+        print(f"model: {result.model}")
+        print(f"request_id: {result.request_id}")
+        print(f"input_tokens: {result.usage.input_tokens}")
+        print(f"output_tokens: {result.usage.output_tokens}")
+        print(f"total_tokens: {result.usage.total_tokens}")
 
-        if response.usage:
-            print(f"input_tokens: {response.usage.input_tokens}")
-            print(f"output_tokens: {response.usage.output_tokens}")
-            print(f"total_tokens: {response.usage.total_tokens}")
-
-    except openai.APITimeoutError:
+    except LLMTimeoutError:
         logger.error("The model request timed out.")
 
-    except openai.RateLimitError:
+    except LLMRateLimitError:
         logger.error("Rate limit or quota was reached.")
 
-    except openai.APIConnectionError as exc:
-        logger.error("Could not connect to the OpenAI API: %s", exc)
+    except LLMConnectionError:
+        logger.error("Could not connect to the LLM provider.")
 
-    except openai.APIStatusError as exc:
+    except LLMProviderError as exc:
         logger.error(
-            "OpenAI returned status=%s request_id=%s",
+            "LLM provider error status=%s request_id=%s",
             exc.status_code,
             exc.request_id,
         )
